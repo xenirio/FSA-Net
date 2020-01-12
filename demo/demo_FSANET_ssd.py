@@ -11,8 +11,21 @@ from keras.layers import Average
 # from moviepy.editor import *
 # from mtcnn.mtcnn import MTCNN
 
-def draw_axis(img, yaw, pitch, roll, tdx=None, tdy=None, size = 50):
+import socket
+
+HOST = '127.0.0.1'  # The server's hostname or IP address
+PORT = 65432        # The port used by the server
+
+def draw_axis(f, img, yaw, pitch, roll, tdx=None, tdy=None, size = 50):
     print(yaw,roll,pitch)
+
+    try:
+        data = "%.12f %.12f %.12f" % (yaw, roll, pitch)
+        f.sendall(data.encode())
+    except:
+        # f.connect((HOST, PORT))
+        print("Re-connecting...")
+
     pitch = pitch * np.pi / 180
     yaw = -(yaw * np.pi / 180)
     roll = roll * np.pi / 180
@@ -44,7 +57,7 @@ def draw_axis(img, yaw, pitch, roll, tdx=None, tdy=None, size = 50):
 
     return img
     
-def draw_results_ssd(detected,input_img,faces,ad,img_size,img_w,img_h,model,time_detection,time_network,time_plot):
+def draw_results_ssd(f, detected,input_img,faces,ad,img_size,img_w,img_h,model,time_detection,time_network,time_plot):
     
     # loop over the detections
     if detected.shape[2]>0:
@@ -81,7 +94,7 @@ def draw_results_ssd(detected,input_img,faces,ad,img_size,img_w,img_h,model,time
                 p_result = model.predict(face)
                 
                 face = face.squeeze()
-                img = draw_axis(input_img[yw1:yw2 + 1, xw1:xw2 + 1, :], p_result[0][0], p_result[0][1], p_result[0][2])
+                img = draw_axis(f, input_img[yw1:yw2 + 1, xw1:xw2 + 1, :], p_result[0][0], p_result[0][1], p_result[0][2])
                 
                 input_img[yw1:yw2 + 1, xw1:xw2 + 1, :] = img
                 
@@ -90,6 +103,8 @@ def draw_results_ssd(detected,input_img,faces,ad,img_size,img_w,img_h,model,time
     return input_img #,time_network,time_plot
 
 def main():
+    # f = open("axis.txt","w+")
+
     try:
         os.mkdir('./img')
     except OSError:
@@ -171,6 +186,9 @@ def main():
     print('Start detecting pose ...')
     detected_pre = np.empty((1,1,1))
 
+    f = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    f.connect((HOST, PORT))
+
     while True:
         # get video frame
         ret, input_img = cap.read()
@@ -200,11 +218,11 @@ def main():
 
             faces = np.empty((detected.shape[2], img_size, img_size, 3))
 
-            input_img = draw_results_ssd(detected,input_img,faces,ad,img_size,img_w,img_h,model,time_detection,time_network,time_plot)
+            input_img = draw_results_ssd(f, detected,input_img,faces,ad,img_size,img_w,img_h,model,time_detection,time_network,time_plot)
             cv2.imwrite('img/'+str(img_idx)+'.png',input_img)
             
         else:
-            input_img = draw_results_ssd(detected,input_img,faces,ad,img_size,img_w,img_h,model,time_detection,time_network,time_plot)
+            input_img = draw_results_ssd(f, detected,input_img,faces,ad,img_size,img_w,img_h,model,time_detection,time_network,time_plot)
 
 
         if detected.shape[2] > detected_pre.shape[2] or img_idx%(skip_frame*3) == 0:
